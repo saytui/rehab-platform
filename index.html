@@ -7,23 +7,16 @@
             font-family: Arial;
             background: #667eea;
             margin: 0;
-            padding: 50px 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            padding: 20px;
             min-height: 100vh;
         }
         .container {
             background: white;
-            padding: 40px;
+            padding: 30px;
             border-radius: 10px;
             text-align: center;
-            max-width: 400px;
-            width: 100%;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
+            max-width: 800px;
+            margin: 0 auto;
         }
         .btn {
             background: #667eea;
@@ -34,14 +27,6 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
-            width: 200px;
-        }
-        .btn:hover {
-            background: #5a6fd8;
-        }
-        #mainPage {
-            display: none;
-            max-width: 600px;
         }
         .exercise-btn {
             background: #27ae60;
@@ -51,21 +36,71 @@
             margin: 10px;
             border-radius: 5px;
             cursor: pointer;
-            width: 180px;
+            width: 200px;
+        }
+        .page {
+            display: none;
+        }
+        .active {
+            display: block;
+        }
+        #cameraPage {
+            text-align: center;
+        }
+        #video, #canvas {
+            width: 100%;
+            max-width: 640px;
+            height: 480px;
+            border: 3px solid #333;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        #video {
+            display: none;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .stat {
+            background: #34495e;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            min-width: 150px;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        #status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status-good {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-bad {
+            background: #f8d7da;
+            color: #721c24;
         }
     </style>
 </head>
 <body>
     <!-- СТРАНИЦА РЕГИСТРАЦИИ -->
-    <div id="authPage" class="container">
+    <div id="authPage" class="page active container">
         <h1>🏥 Rehab Platform</h1>
-        <p>Сообщество для всех</p>
-        <button class="btn" onclick="register()">Присоединиться</button>
-        <button class="btn" onclick="login()">Войти</button>
+        <p>Сообщество для реабилитации</p>
+        <button class="btn" onclick="showPage('mainPage')">Присоединиться</button>
+        <button class="btn" onclick="showPage('mainPage')">Войти</button>
     </div>
 
-    <!-- ГЛАВНАЯ СТРАНИЦА (после входа) -->
-    <div id="mainPage" class="container">
+    <!-- ГЛАВНАЯ СТРАНИЦА -->
+    <div id="mainPage" class="page container">
         <h1>🎉 Добро пожаловать!</h1>
         <p>Выберите упражнение:</p>
         
@@ -74,44 +109,226 @@
         <button class="exercise-btn" onclick="startExercise('face')">😊 Упражнения для лица</button>
         
         <div style="margin-top: 30px;">
-            <button class="btn" onclick="logout()" style="background: #e74c3c;">Выйти</button>
+            <button class="btn" onclick="showPage('authPage')" style="background: #e74c3c;">Выйти</button>
+        </div>
+    </div>
+
+    <!-- СТРАНИЦА КАМЕРЫ -->
+    <div id="cameraPage" class="page container">
+        <h1 id="exerciseTitle">💪 Упражнение</h1>
+        
+        <div class="stats">
+            <div class="stat">
+                <div>Точность</div>
+                <div id="accuracy" class="stat-value">0%</div>
+            </div>
+            <div class="stat">
+                <div>Повторения</div>
+                <div id="repetitions" class="stat-value">0</div>
+            </div>
+        </div>
+
+        <div id="status" class="status-good">
+            Запустите камеру для начала упражнения
+        </div>
+
+        <div>
+            <video id="video" autoplay muted></video>
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div>
+            <button class="btn" onclick="startCamera()">🎥 Включить камеру</button>
+            <button class="btn" onclick="stopCamera()" style="background: #e74c3c;">⏹ Остановить</button>
+            <button class="btn" onclick="showPage('mainPage')">← Назад</button>
+        </div>
+
+        <div style="margin-top: 20px; text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px;">
+            <h3>📋 Инструкция:</h3>
+            <p id="instruction">Встаньте перед камерой и выполняйте движения</p>
+            <p>🔴 Красный скелет - ошибки в выполнении</p>
+            <p>🟢 Зеленый скелет - правильное выполнение</p>
         </div>
     </div>
 
     <script>
-        function register() {
-            alert('Регистрация прошла успешно!');
-            // ПЕРЕХОД НА ГЛАВНУЮ СТРАНИЦУ
-            showMainPage();
+        let currentExercise = '';
+        let cameraActive = false;
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let accuracyElement = document.getElementById('accuracy');
+        let repetitionsElement = document.getElementById('repetitions');
+        let statusElement = document.getElementById('status');
+        let exerciseTitle = document.getElementById('exerciseTitle');
+        let instructionElement = document.getElementById('instruction');
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            document.getElementById(pageId).classList.add('active');
         }
-        
-        function login() {
-            alert('Вход выполнен! Добро пожаловать!');
-            // ПЕРЕХОД НА ГЛАВНУЮ СТРАНИЦУ
-            showMainPage();
-        }
-        
-        function showMainPage() {
-            // Скрываем страницу регистрации
-            document.getElementById('authPage').style.display = 'none';
-            // Показываем главную страницу
-            document.getElementById('mainPage').style.display = 'block';
-        }
-        
-        function logout() {
-            // Возвращаемся на страницу регистрации
-            document.getElementById('mainPage').style.display = 'none';
-            document.getElementById('authPage').style.display = 'block';
-        }
-        
+
         function startExercise(type) {
+            currentExercise = type;
+            
             if (type === 'arm') {
-                alert('💪 Начинаем упражнения для рук!');
+                exerciseTitle.textContent = '💪 Упражнения для рук';
+                instructionElement.textContent = 'Поднимайте и опускайте руки. Следите за правильной осанкой.';
             } else if (type === 'leg') {
-                alert('🦵 Начинаем упражнения для ног!');
+                exerciseTitle.textContent = '🦵 Упражнения для ног';
+                instructionElement.textContent = 'Поднимайте ноги, сгибайте колени. Держите спину прямо.';
             } else if (type === 'face') {
-                alert('😊 Начинаем упражнения для лица!');
+                exerciseTitle.textContent = '😊 Упражнения для лица';
+                instructionElement.textContent = 'Выполняйте мимические упражнения: улыбка, поднятие бровей.';
             }
+            
+            showPage('cameraPage');
+            resetStats();
+        }
+
+        function resetStats() {
+            accuracyElement.textContent = '0%';
+            repetitionsElement.textContent = '0';
+            statusElement.textContent = 'Запустите камеру для начала упражнения';
+            statusElement.className = 'status-good';
+        }
+
+        async function startCamera() {
+            if (cameraActive) return;
+            
+            try {
+                statusElement.textContent = '🔄 Запускаю камеру...';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    cameraActive = true;
+                    statusElement.textContent = '✅ Камера активна! Начинайте упражнение.';
+                    startTracking();
+                };
+                
+            } catch (error) {
+                statusElement.textContent = '❌ Ошибка доступа к камере';
+                statusElement.className = 'status-bad';
+            }
+        }
+
+        function stopCamera() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            cameraActive = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            statusElement.textContent = 'Камера остановлена';
+        }
+
+        function startTracking() {
+            function drawFrame() {
+                if (!cameraActive) return;
+                
+                // Отрисовываем видео
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Имитация отслеживания позы
+                simulatePoseTracking();
+                
+                requestAnimationFrame(drawFrame);
+            }
+            
+            drawFrame();
+        }
+
+        function simulatePoseTracking() {
+            // Случайная точность от 60% до 95%
+            const accuracy = 60 + Math.floor(Math.random() * 35);
+            accuracyElement.textContent = accuracy + '%';
+            
+            // Случайное определение правильности позы
+            const isCorrectPose = Math.random() > 0.3;
+            
+            // Рисуем скелет
+            drawSkeleton(isCorrectPose);
+            
+            // Обновляем статус
+            if (isCorrectPose) {
+                statusElement.textContent = '✅ Отличное выполнение! Продолжайте!';
+                statusElement.className = 'status-good';
+                
+                // Увеличиваем счетчик повторений иногда
+                if (Math.random() > 0.8) {
+                    const currentReps = parseInt(repetitionsElement.textContent);
+                    repetitionsElement.textContent = currentReps + 1;
+                }
+            } else {
+                statusElement.textContent = '❌ Исправьте положение тела';
+                statusElement.className = 'status-bad';
+            }
+        }
+
+        function drawSkeleton(isCorrect) {
+            const color = isCorrect ? '#00ff00' : '#ff0000';
+            const lineWidth = isCorrect ? 3 : 2;
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.fillStyle = color;
+            
+            // Простой скелет для демонстрации
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Голова
+            ctx.beginPath();
+            ctx.arc(centerX, centerY - 80, 20, 0, 2 * Math.PI);
+            ctx.stroke();
+            
+            // Тело
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - 60);
+            ctx.lineTo(centerX, centerY + 40);
+            ctx.stroke();
+            
+            // Руки
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - 30);
+            ctx.lineTo(centerX - 40, centerY);
+            ctx.moveTo(centerX, centerY - 30);
+            ctx.lineTo(centerX + 40, centerY);
+            ctx.stroke();
+            
+            // Ноги
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY + 40);
+            ctx.lineTo(centerX - 30, centerY + 80);
+            ctx.moveTo(centerX, centerY + 40);
+            ctx.lineTo(centerX + 30, centerY + 80);
+            ctx.stroke();
+            
+            // Ключевые точки
+            const points = [
+                [centerX, centerY - 80], // голова
+                [centerX, centerY - 30], // плечи
+                [centerX, centerY + 40], // таз
+                [centerX - 40, centerY], // левая рука
+                [centerX + 40, centerY], // правая рука
+                [centerX - 30, centerY + 80], // левая нога
+                [centerX + 30, centerY + 80]  // правая нога
+            ];
+            
+            points.forEach(point => {
+                ctx.beginPath();
+                ctx.arc(point[0], point[1], 5, 0, 2 * Math.PI);
+                ctx.fill();
+            });
         }
     </script>
 </body>
