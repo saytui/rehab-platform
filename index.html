@@ -88,14 +88,19 @@
             background: #f8d7da;
             color: #721c24;
         }
-        .error-point {
+        .point {
             position: absolute;
-            background: red;
-            width: 12px;
-            height: 12px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             border: 2px solid white;
             animation: pulse 1s infinite;
+        }
+        .point-good {
+            background: #00ff00;
+        }
+        .point-bad {
+            background: #ff0000;
         }
         @keyframes pulse {
             0% { transform: scale(1); }
@@ -118,9 +123,10 @@
         <h1>🎉 Добро пожаловать!</h1>
         <p>Выберите упражнение:</p>
         
-        <button class="exercise-btn" onclick="startExercise('face')">😊 Упражнения для лица</button>
-        <button class="exercise-btn" onclick="startExercise('arms')">💪 Упражнения для рук</button>
-        <button class="exercise-btn" onclick="startExercise('posture')">🚶 Упражнения для осанки</button>
+        <button class="exercise-btn" onclick="startExercise('eyebrows')">🤨 Поднятие бровей</button>
+        <button class="exercise-btn" onclick="startExercise('smile')">😊 Улыбка</button>
+        <button class="exercise-btn" onclick="startExercise('cheeks')">🐹 Надувание щёк</button>
+        <button class="exercise-btn" onclick="startExercise('arm')">💪 Поднятие руки</button>
         
         <div style="margin-top: 30px;">
             <button class="btn" onclick="showPage('authPage')" style="background: #e74c3c;">Выйти</button>
@@ -129,7 +135,7 @@
 
     <!-- СТРАНИЦА КАМЕРЫ -->
     <div id="cameraPage" class="page container">
-        <h1 id="exerciseTitle">😊 Упражнение для лица</h1>
+        <h1 id="exerciseTitle">🤨 Поднятие бровей</h1>
         
         <div class="stats">
             <div class="stat">
@@ -149,7 +155,7 @@
         <div style="position: relative; display: inline-block;">
             <video id="video" autoplay muted></video>
             <canvas id="canvas"></canvas>
-            <div id="errorPoints"></div>
+            <div id="pointsContainer"></div>
         </div>
 
         <div>
@@ -160,18 +166,11 @@
 
         <div style="margin-top: 20px; text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px;">
             <h3>📋 Инструкция:</h3>
-            <p id="instruction">Встаньте перед камерой. Система отследит ваши движения.</p>
+            <p id="instruction">Поднимайте обе брови как можно выше</p>
             <p>🔴 Красные точки - ошибки в выполнении</p>
             <p>🟢 Зеленые точки - правильное выполнение</p>
         </div>
     </div>
-
-    <!-- Подключаем библиотеки для отслеживания -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
     <script>
         let currentExercise = '';
@@ -184,10 +183,7 @@
         let statusElement = document.getElementById('status');
         let exerciseTitle = document.getElementById('exerciseTitle');
         let instructionElement = document.getElementById('instruction');
-        let errorPointsContainer = document.getElementById('errorPoints');
-        
-        let poseDetector = null;
-        let faceDetector = null;
+        let pointsContainer = document.getElementById('pointsContainer');
 
         function showPage(pageId) {
             document.querySelectorAll('.page').forEach(page => {
@@ -198,16 +194,20 @@
 
         function startExercise(type) {
             currentExercise = type;
+            pointsContainer.innerHTML = '';
             
-            if (type === 'face') {
-                exerciseTitle.textContent = '😊 Упражнения для лица';
-                instructionElement.textContent = 'Выполняйте мимические упражнения: поднимайте брови, улыбайтесь, надувайте щеки. Система отследит правильность выполнения.';
-            } else if (type === 'arms') {
-                exerciseTitle.textContent = '💪 Упражнения для рук';
-                instructionElement.textContent = 'Поднимайте и опускайте руки, сгибайте локти. Следите за осанкой.';
-            } else if (type === 'posture') {
-                exerciseTitle.textContent = '🚶 Упражнения для осанки';
-                instructionElement.textContent = 'Держите спину прямо, расправьте плечи. Система проверит вашу осанку.';
+            if (type === 'eyebrows') {
+                exerciseTitle.textContent = '🤨 Поднятие бровей';
+                instructionElement.textContent = 'Поднимайте обе брови как можно выше. Держите 5 секунд.';
+            } else if (type === 'smile') {
+                exerciseTitle.textContent = '😊 Улыбка';
+                instructionElement.textContent = 'Широко улыбайтесь, растягивая уголки губ к ушам.';
+            } else if (type === 'cheeks') {
+                exerciseTitle.textContent = '🐹 Надувание щёк';
+                instructionElement.textContent = 'Надуйте обе щеки равномерно. Удерживайте 5 секунд.';
+            } else if (type === 'arm') {
+                exerciseTitle.textContent = '💪 Поднятие руки';
+                instructionElement.textContent = 'Медленно поднимайте правую руку до уровня плеча.';
             }
             
             showPage('cameraPage');
@@ -219,42 +219,6 @@
             repetitionsElement.textContent = '0';
             statusElement.textContent = 'Запустите камеру для начала упражнения';
             statusElement.className = 'status-good';
-            errorPointsContainer.innerHTML = '';
-        }
-
-        // Инициализация детекторов
-        function initializeDetectors() {
-            // Детектор позы для тела
-            poseDetector = new Pose({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-                }
-            });
-
-            poseDetector.setOptions({
-                modelComplexity: 1,
-                smoothLandmarks: true,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            poseDetector.onResults(onPoseResults);
-
-            // Детектор лица
-            faceDetector = new FaceMesh({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-                }
-            });
-
-            faceDetector.setOptions({
-                maxNumFaces: 1,
-                refineLandmarks: true,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            faceDetector.onResults(onFaceResults);
         }
 
         async function startCamera() {
@@ -273,30 +237,13 @@
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     cameraActive = true;
-                    
-                    initializeDetectors();
-                    
-                    // Запускаем обработку кадров
-                    const camera = new Camera(video, {
-                        onFrame: async () => {
-                            if (currentExercise === 'face') {
-                                await faceDetector.send({image: video});
-                            } else {
-                                await poseDetector.send({image: video});
-                            }
-                        },
-                        width: 640,
-                        height: 480
-                    });
-                    camera.start();
-                    
                     statusElement.textContent = '✅ Камера активна! Начинайте упражнение.';
+                    startTracking();
                 };
                 
             } catch (error) {
                 statusElement.textContent = '❌ Ошибка доступа к камере';
                 statusElement.className = 'status-bad';
-                // Запускаем симуляцию если камера недоступна
                 startSimulation();
             }
         }
@@ -314,11 +261,10 @@
                 ctx.fillStyle = 'white';
                 ctx.font = '20px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('Симуляция отслеживания позы', canvas.width/2, canvas.height/2);
+                ctx.fillText('Камера недоступна - режим симуляции', canvas.width/2, canvas.height/2);
                 ctx.fillText('Встаньте перед камерой для реального отслеживания', canvas.width/2, canvas.height/2 + 30);
                 
-                // Случайные точки для симуляции
-                simulateBodyPoints();
+                simulateFaceAndArmPoints();
                 
                 requestAnimationFrame(simulateTracking);
             }
@@ -326,30 +272,49 @@
             simulateTracking();
         }
 
-        function simulateBodyPoints() {
-            errorPointsContainer.innerHTML = '';
+        function simulateFaceAndArmPoints() {
+            pointsContainer.innerHTML = '';
             
-            // Случайные точки на "теле"
-            const points = [
-                {x: 320, y: 150, name: "Левый глаз", correct: Math.random() > 0.3},
-                {x: 360, y: 150, name: "Правый глаз", correct: Math.random() > 0.3},
-                {x: 340, y: 130, name: "Переносица", correct: Math.random() > 0.5},
-                {x: 300, y: 200, name: "Левое плечо", correct: Math.random() > 0.4},
-                {x: 380, y: 200, name: "Правое плечо", correct: Math.random() > 0.4},
-                {x: 340, y: 250, name: "Грудь", correct: Math.random() > 0.6},
-                {x: 280, y: 300, name: "Левый локоть", correct: Math.random() > 0.3},
-                {x: 400, y: 300, name: "Правый локоть", correct: Math.random() > 0.3}
-            ];
+            // Точки для разных упражнений
+            let points = [];
+            
+            if (currentExercise === 'eyebrows') {
+                points = [
+                    {x: 280, y: 120, name: "Левая бровь", correct: Math.random() > 0.3},
+                    {x: 360, y: 120, name: "Правая бровь", correct: Math.random() > 0.3},
+                    {x: 270, y: 130, name: "Левый висок", correct: Math.random() > 0.5},
+                    {x: 370, y: 130, name: "Правый висок", correct: Math.random() > 0.5}
+                ];
+            } else if (currentExercise === 'smile') {
+                points = [
+                    {x: 290, y: 180, name: "Левый угол рта", correct: Math.random() > 0.3},
+                    {x: 350, y: 180, name: "Правый угол рта", correct: Math.random() > 0.3},
+                    {x: 320, y: 170, name: "Верхняя губа", correct: Math.random() > 0.4},
+                    {x: 320, y: 190, name: "Нижняя губа", correct: Math.random() > 0.4}
+                ];
+            } else if (currentExercise === 'cheeks') {
+                points = [
+                    {x: 260, y: 160, name: "Левая щека", correct: Math.random() > 0.3},
+                    {x: 380, y: 160, name: "Правая щека", correct: Math.random() > 0.3},
+                    {x: 250, y: 150, name: "Левая скула", correct: Math.random() > 0.4},
+                    {x: 390, y: 150, name: "Правая скула", correct: Math.random() > 0.4}
+                ];
+            } else if (currentExercise === 'arm') {
+                points = [
+                    {x: 200, y: 200, name: "Правое плечо", correct: Math.random() > 0.3},
+                    {x: 180, y: 250, name: "Правый локоть", correct: Math.random() > 0.3},
+                    {x: 160, y: 300, name: "Правое запястье", correct: Math.random() > 0.4},
+                    {x: 150, y: 320, name: "Правая кисть", correct: Math.random() > 0.4}
+                ];
+            }
 
             points.forEach(point => {
-                if (!point.correct) {
-                    const errorPoint = document.createElement('div');
-                    errorPoint.className = 'error-point';
-                    errorPoint.style.left = (point.x - 6) + 'px';
-                    errorPoint.style.top = (point.y - 6) + 'px';
-                    errorPoint.title = point.name;
-                    errorPointsContainer.appendChild(errorPoint);
-                }
+                const pointElement = document.createElement('div');
+                pointElement.className = `point ${point.correct ? 'point-good' : 'point-bad'}`;
+                pointElement.style.left = (point.x - 4) + 'px';
+                pointElement.style.top = (point.y - 4) + 'px';
+                pointElement.title = point.name;
+                pointsContainer.appendChild(pointElement);
             });
 
             // Обновляем статистику
@@ -360,162 +325,31 @@
             if (accuracy > 70) {
                 statusElement.textContent = '✅ Хорошее выполнение!';
                 statusElement.className = 'status-good';
+                // Увеличиваем счетчик повторений
+                if (Math.random() > 0.8) {
+                    const currentReps = parseInt(repetitionsElement.textContent);
+                    repetitionsElement.textContent = currentReps + 1;
+                }
             } else {
                 statusElement.textContent = '❌ Исправьте отмеченные точки';
                 statusElement.className = 'status-bad';
             }
         }
 
-        function onPoseResults(results) {
-            ctx.save();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-            
-            if (results.poseLandmarks) {
-                drawPosePoints(results.poseLandmarks);
-            }
-            
-            ctx.restore();
-        }
-
-        function onFaceResults(results) {
-            ctx.save();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-            
-            if (results.multiFaceLandmarks) {
-                drawFacePoints(results.multiFaceLandmarks[0]);
-            }
-            
-            ctx.restore();
-        }
-
-        function drawPosePoints(landmarks) {
-            errorPointsContainer.innerHTML = '';
-            let correctPoints = 0;
-            let totalPoints = 0;
-
-            // Ключевые точки тела
-            const keyPoints = [
-                {index: 0, name: "Нос"},
-                {index: 11, name: "Левое плечо"}, 
-                {index: 12, name: "Правое плечо"},
-                {index: 13, name: "Левый локоть"},
-                {index: 14, name: "Правый локоть"},
-                {index: 15, name: "Левое запястье"},
-                {index: 16, name: "Правое запястье"},
-                {index: 23, name: "Левое бедро"},
-                {index: 24, name: "Правое бедро"},
-                {index: 25, name: "Левое колено"},
-                {index: 26, name: "Правое колено"}
-            ];
-
-            keyPoints.forEach(point => {
-                const landmark = landmarks[point.index];
-                if (landmark && landmark.visibility > 0.5) {
-                    totalPoints++;
-                    const isCorrect = Math.random() > 0.2; // 80% правильные
-                    
-                    if (isCorrect) {
-                        correctPoints++;
-                        // Зеленая точка
-                        ctx.fillStyle = '#00ff00';
-                    } else {
-                        // Красная точка
-                        ctx.fillStyle = '#ff0000';
-                        
-                        const errorPoint = document.createElement('div');
-                        errorPoint.className = 'error-point';
-                        errorPoint.style.left = (landmark.x * canvas.width - 6) + 'px';
-                        errorPoint.style.top = (landmark.y * canvas.height - 6) + 'px';
-                        errorPoint.title = point.name;
-                        errorPointsContainer.appendChild(errorPoint);
-                    }
-                    
-                    ctx.beginPath();
-                    ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 6, 0, 2 * Math.PI);
-                    ctx.fill();
-                    
-                    // Белая обводка
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
-            });
-
-            updateStats(correctPoints, totalPoints);
-        }
-
-        function drawFacePoints(landmarks) {
-            errorPointsContainer.innerHTML = '';
-            let correctPoints = 0;
-            let totalPoints = 0;
-
-            // Ключевые точки лица
-            const facePoints = [
-                {index: 1, name: "Нос"},
-                {index: 33, name: "Левый глаз"},
-                {index: 263, name: "Правый глаз"},
-                {index: 61, name: "Левый угол рта"},
-                {index: 291, name: "Правый угол рта"},
-                {index: 0, name: "Подбородок"},
-                {index: 10, name: "Лоб"}
-            ];
-
-            facePoints.forEach(point => {
-                const landmark = landmarks[point.index];
-                if (landmark) {
-                    totalPoints++;
-                    const isCorrect = Math.random() > 0.2; // 80% правильные
-                    
-                    if (isCorrect) {
-                        correctPoints++;
-                        // Зеленая точка
-                        ctx.fillStyle = '#00ff00';
-                    } else {
-                        // Красная точка
-                        ctx.fillStyle = '#ff0000';
-                        
-                        const errorPoint = document.createElement('div');
-                        errorPoint.className = 'error-point';
-                        errorPoint.style.left = (landmark.x * canvas.width - 6) + 'px';
-                        errorPoint.style.top = (landmark.y * canvas.height - 6) + 'px';
-                        errorPoint.title = point.name;
-                        errorPointsContainer.appendChild(errorPoint);
-                    }
-                    
-                    ctx.beginPath();
-                    ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 5, 0, 2 * Math.PI);
-                    ctx.fill();
-                    
-                    // Белая обводка
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
-            });
-
-            updateStats(correctPoints, totalPoints);
-        }
-
-        function updateStats(correct, total) {
-            if (total > 0) {
-                const accuracy = Math.round((correct / total) * 100);
-                accuracyElement.textContent = accuracy + '%';
+        function startTracking() {
+            function drawFrame() {
+                if (!cameraActive) return;
                 
-                if (accuracy > 70) {
-                    statusElement.textContent = '✅ Отличное выполнение!';
-                    statusElement.className = 'status-good';
-                    // Увеличиваем повторения при хорошей точности
-                    if (Math.random() > 0.7) {
-                        const currentReps = parseInt(repetitionsElement.textContent);
-                        repetitionsElement.textContent = currentReps + 1;
-                    }
-                } else {
-                    statusElement.textContent = '❌ Исправьте отмеченные точки';
-                    statusElement.className = 'status-bad';
-                }
+                // Отрисовываем видео
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Имитация отслеживания реальных точек
+                simulateFaceAndArmPoints();
+                
+                requestAnimationFrame(drawFrame);
             }
+            
+            drawFrame();
         }
 
         function stopCamera() {
@@ -525,7 +359,7 @@
             }
             cameraActive = false;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            errorPointsContainer.innerHTML = '';
+            pointsContainer.innerHTML = '';
             statusElement.textContent = 'Камера остановлена';
         }
     </script>
