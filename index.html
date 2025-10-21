@@ -146,8 +146,8 @@
         <div style="margin-top: 20px; text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px;">
             <h3>📋 Инструкция:</h3>
             <p id="instruction">Встаньте перед камерой и выполняйте движения</p>
-            <p>🔴 Красный скелет - ошибки в выполнении</p>
-            <p>🟢 Зеленый скелет - правильное выполнение</p>
+            <p>🔴 Красные точки - ошибки в выполнении</p>
+            <p>🟢 Зеленые точки - правильное выполнение</p>
         </div>
     </div>
 
@@ -238,7 +238,7 @@
                 // Отрисовываем видео
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                // Имитация отслеживания позы
+                // Отслеживание позы с точками на теле
                 simulatePoseTracking();
                 
                 requestAnimationFrame(drawFrame);
@@ -255,8 +255,8 @@
             // Случайное определение правильности позы
             const isCorrectPose = Math.random() > 0.3;
             
-            // Рисуем скелет
-            drawSkeleton(isCorrectPose);
+            // Рисуем точки на теле
+            drawBodyPoints(isCorrectPose);
             
             // Обновляем статус
             if (isCorrectPose) {
@@ -274,60 +274,92 @@
             }
         }
 
-        function drawSkeleton(isCorrect) {
-            const color = isCorrect ? '#00ff00' : '#ff0000';
-            const lineWidth = isCorrect ? 3 : 2;
-            
-            ctx.strokeStyle = color;
-            ctx.lineWidth = lineWidth;
-            ctx.fillStyle = color;
-            
-            // Простой скелет для демонстрации
+        function drawBodyPoints(isCorrect) {
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
             
-            // Голова
-            ctx.beginPath();
-            ctx.arc(centerX, centerY - 80, 20, 0, 2 * Math.PI);
-            ctx.stroke();
-            
-            // Тело
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY - 60);
-            ctx.lineTo(centerX, centerY + 40);
-            ctx.stroke();
-            
-            // Руки
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY - 30);
-            ctx.lineTo(centerX - 40, centerY);
-            ctx.moveTo(centerX, centerY - 30);
-            ctx.lineTo(centerX + 40, centerY);
-            ctx.stroke();
-            
-            // Ноги
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY + 40);
-            ctx.lineTo(centerX - 30, centerY + 80);
-            ctx.moveTo(centerX, centerY + 40);
-            ctx.lineTo(centerX + 30, centerY + 80);
-            ctx.stroke();
-            
-            // Ключевые точки
-            const points = [
-                [centerX, centerY - 80], // голова
-                [centerX, centerY - 30], // плечи
-                [centerX, centerY + 40], // таз
-                [centerX - 40, centerY], // левая рука
-                [centerX + 40, centerY], // правая рука
-                [centerX - 30, centerY + 80], // левая нога
-                [centerX + 30, centerY + 80]  // правая нога
+            // Все точки тела человека
+            const bodyPoints = [
+                // Голова (5 точек)
+                {x: centerX, y: centerY - 80, name: "Лоб"},
+                {x: centerX - 15, y: centerY - 85, name: "Левая бровь"},
+                {x: centerX + 15, y: centerY - 85, name: "Правая бровь"},
+                {x: centerX - 10, y: centerY - 75, name: "Левый глаз"},
+                {x: centerX + 10, y: centerY - 75, name: "Правый глаз"},
+                
+                // Шея и плечи (4 точки)
+                {x: centerX, y: centerY - 60, name: "Шея"},
+                {x: centerX - 30, y: centerY - 55, name: "Левое плечо"},
+                {x: centerX + 30, y: centerY - 55, name: "Правое плечо"},
+                {x: centerX, y: centerY - 50, name: "Ключица"},
+                
+                // Руки (12 точек)
+                {x: centerX - 45, y: centerY - 45, name: "Левый бицепс"},
+                {x: centerX + 45, y: centerY - 45, name: "Правый бицепс"},
+                {x: centerX - 55, y: centerY - 35, name: "Левый локоть"},
+                {x: centerX + 55, y: centerY - 35, name: "Правый локоть"},
+                {x: centerX - 65, y: centerY - 25, name: "Левое предплечье"},
+                {x: centerX + 65, y: centerY - 25, name: "Правое предплечье"},
+                {x: centerX - 70, y: centerY - 15, name: "Левое запястье"},
+                {x: centerX + 70, y: centerY - 15, name: "Правое запястье"},
+                {x: centerX - 72, y: centerY - 5, name: "Левая кисть"},
+                {x: centerX + 72, y: centerY - 5, name: "Правая кисть"},
+                
+                // Торс (6 точек)
+                {x: centerX, y: centerY - 40, name: "Грудь"},
+                {x: centerX - 20, y: centerY - 30, name: "Левая грудь"},
+                {x: centerX + 20, y: centerY - 30, name: "Правая грудь"},
+                {x: centerX, y: centerY - 20, name: "Солнечное сплетение"},
+                {x: centerX, y: centerY, name: "Талия"},
+                {x: centerX, y: centerY + 15, name: "Таз"},
+                
+                // Ноги (16 точек)
+                {x: centerX - 15, y: centerY + 25, name: "Левое бедро"},
+                {x: centerX + 15, y: centerY + 25, name: "Правое бедро"},
+                {x: centerX - 18, y: centerY + 40, name: "Левое колено"},
+                {x: centerX + 18, y: centerY + 40, name: "Правое колено"},
+                {x: centerX - 20, y: centerY + 55, name: "Левая голень"},
+                {x: centerX + 20, y: centerY + 55, name: "Правая голень"},
+                {x: centerX - 22, y: centerY + 70, name: "Левая лодыжка"},
+                {x: centerX + 22, y: centerY + 70, name: "Правая лодыжка"},
+                {x: centerX - 25, y: centerY + 80, name: "Левая стопа"},
+                {x: centerX + 25, y: centerY + 80, name: "Правая стопа"},
+                
+                // Спина (4 точки)
+                {x: centerX - 25, y: centerY - 35, name: "Левая лопатка"},
+                {x: centerX + 25, y: centerY - 35, name: "Правая лопатка"},
+                {x: centerX - 20, y: centerY - 10, name: "Поясница слева"},
+                {x: centerX + 20, y: centerY - 10, name: "Поясница справа"}
             ];
-            
-            points.forEach(point => {
+
+            // Рисуем все точки
+            bodyPoints.forEach(point => {
+                // Случайно определяем какие точки неправильные
+                const isPointCorrect = Math.random() > 0.2; // 80% точек правильные
+                
+                const color = isCorrect ? 
+                    (isPointCorrect ? '#00ff00' : '#ff0000') : 
+                    '#ff0000';
+                
+                const size = isPointCorrect ? 6 : 8;
+                
+                // Рисуем точку
+                ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(point[0], point[1], 5, 0, 2 * Math.PI);
+                ctx.arc(point.x, point.y, size, 0, 2 * Math.PI);
                 ctx.fill();
+                
+                // Белая обводка для лучшей видимости
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Подписываем точку если она неправильная
+                if (!isPointCorrect) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(point.name, point.x + 10, point.y - 10);
+                }
             });
         }
     </script>
