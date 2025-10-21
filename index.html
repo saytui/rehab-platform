@@ -138,13 +138,17 @@
             gap: 15px;
             margin: 20px 0;
         }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <!-- СТРАНИЦА РЕГИСТРАЦИИ -->
     <div id="authPage" class="page active container">
         <h1>🏥 Rehab Platform</h1>
-        <p>Профессиональная система для реабилитации</p>
+        <p>Профессиональная система для реабилитации с компьютерным зрением</p>
         <button class="btn" onclick="showPage('mainPage')">Присоединиться</button>
         <button class="btn" onclick="showPage('mainPage')">Войти</button>
     </div>
@@ -157,10 +161,8 @@
         <div class="exercise-grid">
             <button class="exercise-btn" onclick="startExercise('eyebrows')">🤨 Брови</button>
             <button class="exercise-btn" onclick="startExercise('smile')">😊 Улыбка</button>
-            <button class="exercise-btn" onclick="startExercise('cheeks')">🐹 Щёки</button>
             <button class="exercise-btn" onclick="startExercise('arm')">💪 Рука</button>
             <button class="exercise-btn" onclick="startExercise('leg')">🦵 Нога</button>
-            <button class="exercise-btn" onclick="startExercise('walking')">🚶 Ходьба</button>
         </div>
         
         <div style="margin-top: 30px;">
@@ -202,10 +204,18 @@
         <div style="margin-top: 20px; text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px;">
             <h3>📋 Инструкция:</h3>
             <p id="instruction">Поднимайте обе брови как можно выше</p>
-            <p>🟢 <strong>Зеленая подсветка</strong> - вы все делаете правильно!</p>
-            <p>🔴 <strong>Красная мигающая подсветка</strong> - есть ошибки в выполнении</p>
+            <p>🟢 <strong>Зеленая подсветка</strong> - правильное выполнение</p>
+            <p>🔴 <strong>Красная мигающая подсветка</strong> - ошибки в выполнении</p>
+            <p class="loading">⚡ Система анализирует ваши движения в реальном времени</p>
         </div>
     </div>
+
+    <!-- Подключаем MediaPipe для реального отслеживания -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
     <script>
         let currentExercise = '';
@@ -220,6 +230,18 @@
         let instructionElement = document.getElementById('instruction');
         let overlay = document.getElementById('overlay');
 
+        // Переменные для отслеживания позы
+        let poseDetector = null;
+        let faceDetector = null;
+        let lastPoseLandmarks = null;
+        let lastFaceLandmarks = null;
+        let repetitionCount = 0;
+        let exerciseState = {
+            lastRepetitionTime: 0,
+            movementHistory: [],
+            basePosition: null
+        };
+
         function showPage(pageId) {
             document.querySelectorAll('.page').forEach(page => {
                 page.classList.remove('active');
@@ -230,19 +252,20 @@
         function startExercise(type) {
             currentExercise = type;
             resetOverlay();
+            exerciseState = {
+                lastRepetitionTime: 0,
+                movementHistory: [],
+                basePosition: null
+            };
             
             const exercises = {
                 'eyebrows': {
                     title: '🤨 Поднятие бровей',
-                    instruction: 'Медленно поднимите обе брови как можно выше. Задержите на 3 секунды, затем расслабьте.'
+                    instruction: 'Медленно поднимите обе брови как можно выше. Система отследит симметричность.'
                 },
                 'smile': {
                     title: '😊 Симметричная улыбка', 
                     instruction: 'Улыбнитесь, равномерно растягивая оба уголка рта. Избегайте асимметрии.'
-                },
-                'cheeks': {
-                    title: '🐹 Надувание щёк',
-                    instruction: 'Надуйте обе щеки равномерно. Удерживайте воздух 5 секунд, затем медленно выпустите.'
                 },
                 'arm': {
                     title: '💪 Поднятие руки',
@@ -250,11 +273,7 @@
                 },
                 'leg': {
                     title: '🦵 Поднятие ноги',
-                    instruction: 'Лежа или сидя, медленно поднимите правую ногу. Держите колено прямым.'
-                },
-                'walking': {
-                    title: '🚶 Ходьба на месте',
-                    instruction: 'Маршируйте на месте, поднимая колени до уровня пояса. Следите за осанкой.'
+                    instruction: 'Стоя, медленно поднимите правую ногу. Держите колено прямым, спину ровно.'
                 }
             };
 
@@ -271,40 +290,76 @@
         function resetStats() {
             accuracyElement.textContent = '0%';
             repetitionsElement.textContent = '0';
+            repetitionCount = 0;
             statusElement.textContent = 'Запустите камеру для начала упражнения';
-            setGoodStatus();
+            setNeutralStatus();
         }
 
         function resetOverlay() {
             overlay.className = 'overlay';
         }
 
-        function setGoodStatus() {
-            statusElement.textContent = '✅ Отлично! Правильная техника выполнения!';
+        function setNeutralStatus() {
+            statusElement.textContent = '🔵 Встаньте перед камерой и начните упражнение';
+            statusElement.className = 'status-good';
+            overlay.className = 'overlay';
+        }
+
+        function setGoodStatus(message = '✅ Отлично! Правильная техника выполнения!') {
+            statusElement.textContent = message;
             statusElement.className = 'status-good';
             overlay.className = 'overlay overlay-good';
         }
 
-        function setBadStatus() {
-            const messages = [
-                '❌ Слишком быстрое выполнение! Делайте медленнее.',
-                '❌ Неправильная амплитуда движения!',
-                '❌ Нарушена симметрия! Следите за обеими сторонами.',
-                '❌ Слишком резкое движение! Выполняйте плавно.',
-                '❌ Неполное выполнение! Увеличьте амплитуду.'
-            ];
-            const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-            statusElement.textContent = randomMessage;
+        function setBadStatus(message = '❌ Обнаружены ошибки в выполнении!') {
+            statusElement.textContent = message;
             statusElement.className = 'status-bad';
             overlay.className = 'overlay overlay-bad';
+        }
+
+        // Инициализация детекторов
+        function initializeDetectors() {
+            // Детектор позы для тела
+            poseDetector = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+
+            poseDetector.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            poseDetector.onResults(onPoseResults);
+
+            // Детектор лица
+            faceDetector = new FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+
+            faceDetector.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            faceDetector.onResults(onFaceResults);
         }
 
         async function startCamera() {
             if (cameraActive) return;
             
             try {
-                statusElement.textContent = '🔄 Запрашиваю доступ к камере...';
+                statusElement.textContent = '🔄 Загружаю систему компьютерного зрения...';
                 resetOverlay();
+                
+                initializeDetectors();
                 
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
@@ -320,97 +375,207 @@
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     cameraActive = true;
-                    statusElement.textContent = '✅ Камера активна! Начинайте упражнение.';
-                    setGoodStatus();
-                    startTracking();
+                    
+                    // Запускаем обработку кадров
+                    const camera = new Camera(video, {
+                        onFrame: async () => {
+                            if (currentExercise === 'eyebrows' || currentExercise === 'smile') {
+                                await faceDetector.send({image: video});
+                            } else {
+                                await poseDetector.send({image: video});
+                            }
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    camera.start();
+                    
+                    statusElement.textContent = '✅ Система готова! Начинайте упражнение.';
+                    setNeutralStatus();
                 };
                 
             } catch (error) {
                 statusElement.textContent = '❌ Ошибка доступа к камере. Проверьте разрешения браузера.';
                 setBadStatus();
-                startSimulation();
             }
         }
 
-        function startSimulation() {
-            statusElement.textContent = '🔧 Режим демонстрации. Встаньте перед камерой для лучших результатов.';
-            cameraActive = true;
+        // Обработка результатов позы
+        function onPoseResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
             
-            function simulateTracking() {
-                if (!cameraActive) return;
-                
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#2c3e50';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Красивое сообщение
-                ctx.fillStyle = 'white';
-                ctx.font = '24px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Rehab Platform', canvas.width/2, canvas.height/2 - 40);
-                ctx.font = '18px Arial';
-                ctx.fillText('Профессиональная система реабилитации', canvas.width/2, canvas.height/2 - 10);
-                ctx.fillText('Встаньте перед камерой', canvas.width/2, canvas.height/2 + 30);
-                ctx.fillText('для отслеживания движений', canvas.width/2, canvas.height/2 + 60);
-                
-                // Демонстрация смены состояний
-                if (Math.random() > 0.7) {
-                    setBadStatus();
-                } else {
-                    setGoodStatus();
-                }
-                
-                requestAnimationFrame(simulateTracking);
+            if (results.poseLandmarks) {
+                lastPoseLandmarks = results.poseLandmarks;
+                analyzePoseExercise();
             }
             
-            simulateTracking();
+            ctx.restore();
         }
 
-        function startTracking() {
-            let lastChangeTime = Date.now();
-            let currentState = 'good';
-            let repetitionCount = 0;
+        // Обработка результатов лица
+        function onFaceResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
             
-            function drawFrame() {
-                if (!cameraActive) return;
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                lastFaceLandmarks = results.multiFaceLandmarks[0];
+                analyzeFaceExercise();
+            }
+            
+            ctx.restore();
+        }
+
+        // Анализ упражнений для лица
+        function analyzeFaceExercise() {
+            if (!lastFaceLandmarks) return;
+
+            let accuracy = 0;
+            let feedback = '';
+            let isCorrect = false;
+
+            if (currentExercise === 'eyebrows') {
+                // Анализ поднятия бровей
+                const leftBrow = lastFaceLandmarks[70];  // Левая бровь
+                const rightBrow = lastFaceLandmarks[300]; // Правая бровь
                 
-                // Отрисовываем видео
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                // Реалистичная логика отслеживания
-                const now = Date.now();
-                if (now - lastChangeTime > 1500 + Math.random() * 2000) {
-                    // Более умное определение состояния в зависимости от упражнения
-                    let correctProbability = 0.7; // 70% правильного выполнения по умолчанию
+                if (leftBrow && rightBrow) {
+                    const browHeight = (leftBrow.y + rightBrow.y) / 2;
+                    const symmetry = Math.abs(leftBrow.y - rightBrow.y);
                     
-                    // Разная сложность для разных упражнений
-                    if (currentExercise === 'walking') correctProbability = 0.6;
-                    if (currentExercise === 'leg') correctProbability = 0.65;
-                    if (currentExercise === 'eyebrows') correctProbability = 0.75;
-                    
-                    currentState = Math.random() > correctProbability ? 'bad' : 'good';
-                    lastChangeTime = now;
-                    
-                    if (currentState === 'good') {
-                        setGoodStatus();
-                        repetitionCount++;
-                        repetitionsElement.textContent = repetitionCount;
-                        
-                        // Высокая точность при правильном выполнении
-                        const accuracy = 85 + Math.floor(Math.random() * 15);
-                        accuracyElement.textContent = accuracy + '%';
+                    // Проверяем высоту бровей и симметричность
+                    if (browHeight < 0.3 && symmetry < 0.02) {
+                        accuracy = 95;
+                        isCorrect = true;
+                        feedback = '✅ Идеально! Брови подняты высоко и симметрично';
+                    } else if (browHeight < 0.4 && symmetry < 0.03) {
+                        accuracy = 75;
+                        isCorrect = true;
+                        feedback = '✅ Хорошо! Можно поднять брови еще выше';
                     } else {
-                        setBadStatus();
-                        // Низкая точность при ошибках
-                        const accuracy = 40 + Math.floor(Math.random() * 35);
-                        accuracyElement.textContent = accuracy + '%';
+                        accuracy = 40;
+                        isCorrect = false;
+                        feedback = '❌ Поднимите брови выше и следите за симметрией';
                     }
                 }
+            } else if (currentExercise === 'smile') {
+                // Анализ улыбки
+                const leftMouth = lastFaceLandmarks[61];  // Левый угол рта
+                const rightMouth = lastFaceLandmarks[291]; // Правый угол рта
                 
-                requestAnimationFrame(drawFrame);
+                if (leftMouth && rightMouth) {
+                    const smileWidth = Math.abs(rightMouth.x - leftMouth.x);
+                    const symmetry = Math.abs(leftMouth.y - rightMouth.y);
+                    
+                    if (smileWidth > 0.15 && symmetry < 0.01) {
+                        accuracy = 90;
+                        isCorrect = true;
+                        feedback = '✅ Прекрасная симметричная улыбка!';
+                    } else if (smileWidth > 0.12 && symmetry < 0.02) {
+                        accuracy = 70;
+                        isCorrect = true;
+                        feedback = '✅ Хорошая улыбка! Растяните губы немного шире';
+                    } else {
+                        accuracy = 35;
+                        isCorrect = false;
+                        feedback = '❌ Улыбнитесь шире и следите за симметрией уголков рта';
+                    }
+                }
             }
+
+            updateExerciseStats(accuracy, isCorrect, feedback);
+        }
+
+        // Анализ упражнений для тела
+        function analyzePoseExercise() {
+            if (!lastPoseLandmarks) return;
+
+            let accuracy = 0;
+            let feedback = '';
+            let isCorrect = false;
+
+            if (currentExercise === 'arm') {
+                // Анализ поднятия руки
+                const rightShoulder = lastPoseLandmarks[12]; // Правое плечо
+                const rightWrist = lastPoseLandmarks[16];    // Правое запястье
+                const rightElbow = lastPoseLandmarks[14];    // Правый локоть
+                
+                if (rightShoulder && rightWrist && rightElbow) {
+                    const armHeight = rightShoulder.y - rightWrist.y;
+                    const elbowAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
+                    
+                    if (armHeight > 0.1 && elbowAngle > 150) {
+                        accuracy = 92;
+                        isCorrect = true;
+                        feedback = '✅ Идеально! Рука поднята правильно, локоть прямой';
+                    } else if (armHeight > 0.05 && elbowAngle > 140) {
+                        accuracy = 68;
+                        isCorrect = true;
+                        feedback = '✅ Хорошо! Поднимите руку еще выше';
+                    } else {
+                        accuracy = 30;
+                        isCorrect = false;
+                        feedback = '❌ Поднимите руку выше и выпрямите локоть';
+                    }
+                }
+            } else if (currentExercise === 'leg') {
+                // Анализ поднятия ноги
+                const rightHip = lastPoseLandmarks[24];    // Правое бедро
+                const rightAnkle = lastPoseLandmarks[28];  // Правая лодыжка
+                const rightKnee = lastPoseLandmarks[26];   // Правое колено
+                
+                if (rightHip && rightAnkle && rightKnee) {
+                    const legHeight = rightHip.y - rightAnkle.y;
+                    const kneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+                    
+                    if (legHeight > 0.08 && kneeAngle > 160) {
+                        accuracy = 88;
+                        isCorrect = true;
+                        feedback = '✅ Отлично! Нога поднята правильно, колено прямое';
+                    } else if (legHeight > 0.04 && kneeAngle > 150) {
+                        accuracy = 65;
+                        isCorrect = true;
+                        feedback = '✅ Неплохо! Поднимите ногу еще выше';
+                    } else {
+                        accuracy = 25;
+                        isCorrect = false;
+                        feedback = '❌ Поднимите ногу выше и выпрямите колено';
+                    }
+                }
+            }
+
+            updateExerciseStats(accuracy, isCorrect, feedback);
+        }
+
+        // Вспомогательная функция для расчета угла
+        function calculateAngle(a, b, c) {
+            const ab = [b.x - a.x, b.y - a.y];
+            const cb = [b.x - c.x, b.y - c.y];
             
-            drawFrame();
+            const dot = ab[0] * cb[0] + ab[1] * cb[1];
+            const cross = ab[0] * cb[1] - ab[1] * cb[0];
+            
+            return Math.abs(Math.atan2(cross, dot) * 180 / Math.PI);
+        }
+
+        function updateExerciseStats(accuracy, isCorrect, feedback) {
+            accuracyElement.textContent = accuracy + '%';
+            
+            if (isCorrect) {
+                setGoodStatus(feedback);
+                
+                // Увеличиваем счетчик повторений при хорошей точности
+                const now = Date.now();
+                if (now - exerciseState.lastRepetitionTime > 2000 && accuracy > 70) {
+                    repetitionCount++;
+                    repetitionsElement.textContent = repetitionCount;
+                    exerciseState.lastRepetitionTime = now;
+                }
+            } else {
+                setBadStatus(feedback);
+            }
         }
 
         function stopCamera() {
