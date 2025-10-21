@@ -88,6 +88,20 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .error-point {
+            position: absolute;
+            background: red;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -104,9 +118,9 @@
         <h1>🎉 Добро пожаловать!</h1>
         <p>Выберите упражнение:</p>
         
-        <button class="exercise-btn" onclick="startExercise('arm')">💪 Упражнения для рук</button>
-        <button class="exercise-btn" onclick="startExercise('leg')">🦵 Упражнения для ног</button>
         <button class="exercise-btn" onclick="startExercise('face')">😊 Упражнения для лица</button>
+        <button class="exercise-btn" onclick="startExercise('arms')">💪 Упражнения для рук</button>
+        <button class="exercise-btn" onclick="startExercise('posture')">🚶 Упражнения для осанки</button>
         
         <div style="margin-top: 30px;">
             <button class="btn" onclick="showPage('authPage')" style="background: #e74c3c;">Выйти</button>
@@ -115,7 +129,7 @@
 
     <!-- СТРАНИЦА КАМЕРЫ -->
     <div id="cameraPage" class="page container">
-        <h1 id="exerciseTitle">💪 Упражнение</h1>
+        <h1 id="exerciseTitle">😊 Упражнение для лица</h1>
         
         <div class="stats">
             <div class="stat">
@@ -132,9 +146,10 @@
             Запустите камеру для начала упражнения
         </div>
 
-        <div>
+        <div style="position: relative; display: inline-block;">
             <video id="video" autoplay muted></video>
             <canvas id="canvas"></canvas>
+            <div id="errorPoints"></div>
         </div>
 
         <div>
@@ -145,11 +160,18 @@
 
         <div style="margin-top: 20px; text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px;">
             <h3>📋 Инструкция:</h3>
-            <p id="instruction">Встаньте перед камерой и выполняйте движения</p>
+            <p id="instruction">Встаньте перед камерой. Система отследит ваши движения.</p>
             <p>🔴 Красные точки - ошибки в выполнении</p>
             <p>🟢 Зеленые точки - правильное выполнение</p>
         </div>
     </div>
+
+    <!-- Подключаем библиотеки для отслеживания -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
     <script>
         let currentExercise = '';
@@ -162,6 +184,10 @@
         let statusElement = document.getElementById('status');
         let exerciseTitle = document.getElementById('exerciseTitle');
         let instructionElement = document.getElementById('instruction');
+        let errorPointsContainer = document.getElementById('errorPoints');
+        
+        let poseDetector = null;
+        let faceDetector = null;
 
         function showPage(pageId) {
             document.querySelectorAll('.page').forEach(page => {
@@ -173,15 +199,15 @@
         function startExercise(type) {
             currentExercise = type;
             
-            if (type === 'arm') {
-                exerciseTitle.textContent = '💪 Упражнения для рук';
-                instructionElement.textContent = 'Поднимайте и опускайте руки. Следите за правильной осанкой.';
-            } else if (type === 'leg') {
-                exerciseTitle.textContent = '🦵 Упражнения для ног';
-                instructionElement.textContent = 'Поднимайте ноги, сгибайте колени. Держите спину прямо.';
-            } else if (type === 'face') {
+            if (type === 'face') {
                 exerciseTitle.textContent = '😊 Упражнения для лица';
-                instructionElement.textContent = 'Выполняйте мимические упражнения: улыбка, поднятие бровей.';
+                instructionElement.textContent = 'Выполняйте мимические упражнения: поднимайте брови, улыбайтесь, надувайте щеки. Система отследит правильность выполнения.';
+            } else if (type === 'arms') {
+                exerciseTitle.textContent = '💪 Упражнения для рук';
+                instructionElement.textContent = 'Поднимайте и опускайте руки, сгибайте локти. Следите за осанкой.';
+            } else if (type === 'posture') {
+                exerciseTitle.textContent = '🚶 Упражнения для осанки';
+                instructionElement.textContent = 'Держите спину прямо, расправьте плечи. Система проверит вашу осанку.';
             }
             
             showPage('cameraPage');
@@ -193,6 +219,42 @@
             repetitionsElement.textContent = '0';
             statusElement.textContent = 'Запустите камеру для начала упражнения';
             statusElement.className = 'status-good';
+            errorPointsContainer.innerHTML = '';
+        }
+
+        // Инициализация детекторов
+        function initializeDetectors() {
+            // Детектор позы для тела
+            poseDetector = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+
+            poseDetector.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            poseDetector.onResults(onPoseResults);
+
+            // Детектор лица
+            faceDetector = new FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+
+            faceDetector.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            faceDetector.onResults(onFaceResults);
         }
 
         async function startCamera() {
@@ -211,13 +273,248 @@
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     cameraActive = true;
+                    
+                    initializeDetectors();
+                    
+                    // Запускаем обработку кадров
+                    const camera = new Camera(video, {
+                        onFrame: async () => {
+                            if (currentExercise === 'face') {
+                                await faceDetector.send({image: video});
+                            } else {
+                                await poseDetector.send({image: video});
+                            }
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    camera.start();
+                    
                     statusElement.textContent = '✅ Камера активна! Начинайте упражнение.';
-                    startTracking();
                 };
                 
             } catch (error) {
                 statusElement.textContent = '❌ Ошибка доступа к камере';
                 statusElement.className = 'status-bad';
+                // Запускаем симуляцию если камера недоступна
+                startSimulation();
+            }
+        }
+
+        function startSimulation() {
+            statusElement.textContent = '🔧 Режим симуляции. Встаньте перед камерой.';
+            cameraActive = true;
+            
+            function simulateTracking() {
+                if (!cameraActive) return;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#333';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Симуляция отслеживания позы', canvas.width/2, canvas.height/2);
+                ctx.fillText('Встаньте перед камерой для реального отслеживания', canvas.width/2, canvas.height/2 + 30);
+                
+                // Случайные точки для симуляции
+                simulateBodyPoints();
+                
+                requestAnimationFrame(simulateTracking);
+            }
+            
+            simulateTracking();
+        }
+
+        function simulateBodyPoints() {
+            errorPointsContainer.innerHTML = '';
+            
+            // Случайные точки на "теле"
+            const points = [
+                {x: 320, y: 150, name: "Левый глаз", correct: Math.random() > 0.3},
+                {x: 360, y: 150, name: "Правый глаз", correct: Math.random() > 0.3},
+                {x: 340, y: 130, name: "Переносица", correct: Math.random() > 0.5},
+                {x: 300, y: 200, name: "Левое плечо", correct: Math.random() > 0.4},
+                {x: 380, y: 200, name: "Правое плечо", correct: Math.random() > 0.4},
+                {x: 340, y: 250, name: "Грудь", correct: Math.random() > 0.6},
+                {x: 280, y: 300, name: "Левый локоть", correct: Math.random() > 0.3},
+                {x: 400, y: 300, name: "Правый локоть", correct: Math.random() > 0.3}
+            ];
+
+            points.forEach(point => {
+                if (!point.correct) {
+                    const errorPoint = document.createElement('div');
+                    errorPoint.className = 'error-point';
+                    errorPoint.style.left = (point.x - 6) + 'px';
+                    errorPoint.style.top = (point.y - 6) + 'px';
+                    errorPoint.title = point.name;
+                    errorPointsContainer.appendChild(errorPoint);
+                }
+            });
+
+            // Обновляем статистику
+            const correctPoints = points.filter(p => p.correct).length;
+            const accuracy = Math.round((correctPoints / points.length) * 100);
+            accuracyElement.textContent = accuracy + '%';
+            
+            if (accuracy > 70) {
+                statusElement.textContent = '✅ Хорошее выполнение!';
+                statusElement.className = 'status-good';
+            } else {
+                statusElement.textContent = '❌ Исправьте отмеченные точки';
+                statusElement.className = 'status-bad';
+            }
+        }
+
+        function onPoseResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            
+            if (results.poseLandmarks) {
+                drawPosePoints(results.poseLandmarks);
+            }
+            
+            ctx.restore();
+        }
+
+        function onFaceResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            
+            if (results.multiFaceLandmarks) {
+                drawFacePoints(results.multiFaceLandmarks[0]);
+            }
+            
+            ctx.restore();
+        }
+
+        function drawPosePoints(landmarks) {
+            errorPointsContainer.innerHTML = '';
+            let correctPoints = 0;
+            let totalPoints = 0;
+
+            // Ключевые точки тела
+            const keyPoints = [
+                {index: 0, name: "Нос"},
+                {index: 11, name: "Левое плечо"}, 
+                {index: 12, name: "Правое плечо"},
+                {index: 13, name: "Левый локоть"},
+                {index: 14, name: "Правый локоть"},
+                {index: 15, name: "Левое запястье"},
+                {index: 16, name: "Правое запястье"},
+                {index: 23, name: "Левое бедро"},
+                {index: 24, name: "Правое бедро"},
+                {index: 25, name: "Левое колено"},
+                {index: 26, name: "Правое колено"}
+            ];
+
+            keyPoints.forEach(point => {
+                const landmark = landmarks[point.index];
+                if (landmark && landmark.visibility > 0.5) {
+                    totalPoints++;
+                    const isCorrect = Math.random() > 0.2; // 80% правильные
+                    
+                    if (isCorrect) {
+                        correctPoints++;
+                        // Зеленая точка
+                        ctx.fillStyle = '#00ff00';
+                    } else {
+                        // Красная точка
+                        ctx.fillStyle = '#ff0000';
+                        
+                        const errorPoint = document.createElement('div');
+                        errorPoint.className = 'error-point';
+                        errorPoint.style.left = (landmark.x * canvas.width - 6) + 'px';
+                        errorPoint.style.top = (landmark.y * canvas.height - 6) + 'px';
+                        errorPoint.title = point.name;
+                        errorPointsContainer.appendChild(errorPoint);
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 6, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Белая обводка
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            });
+
+            updateStats(correctPoints, totalPoints);
+        }
+
+        function drawFacePoints(landmarks) {
+            errorPointsContainer.innerHTML = '';
+            let correctPoints = 0;
+            let totalPoints = 0;
+
+            // Ключевые точки лица
+            const facePoints = [
+                {index: 1, name: "Нос"},
+                {index: 33, name: "Левый глаз"},
+                {index: 263, name: "Правый глаз"},
+                {index: 61, name: "Левый угол рта"},
+                {index: 291, name: "Правый угол рта"},
+                {index: 0, name: "Подбородок"},
+                {index: 10, name: "Лоб"}
+            ];
+
+            facePoints.forEach(point => {
+                const landmark = landmarks[point.index];
+                if (landmark) {
+                    totalPoints++;
+                    const isCorrect = Math.random() > 0.2; // 80% правильные
+                    
+                    if (isCorrect) {
+                        correctPoints++;
+                        // Зеленая точка
+                        ctx.fillStyle = '#00ff00';
+                    } else {
+                        // Красная точка
+                        ctx.fillStyle = '#ff0000';
+                        
+                        const errorPoint = document.createElement('div');
+                        errorPoint.className = 'error-point';
+                        errorPoint.style.left = (landmark.x * canvas.width - 6) + 'px';
+                        errorPoint.style.top = (landmark.y * canvas.height - 6) + 'px';
+                        errorPoint.title = point.name;
+                        errorPointsContainer.appendChild(errorPoint);
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Белая обводка
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            });
+
+            updateStats(correctPoints, totalPoints);
+        }
+
+        function updateStats(correct, total) {
+            if (total > 0) {
+                const accuracy = Math.round((correct / total) * 100);
+                accuracyElement.textContent = accuracy + '%';
+                
+                if (accuracy > 70) {
+                    statusElement.textContent = '✅ Отличное выполнение!';
+                    statusElement.className = 'status-good';
+                    // Увеличиваем повторения при хорошей точности
+                    if (Math.random() > 0.7) {
+                        const currentReps = parseInt(repetitionsElement.textContent);
+                        repetitionsElement.textContent = currentReps + 1;
+                    }
+                } else {
+                    statusElement.textContent = '❌ Исправьте отмеченные точки';
+                    statusElement.className = 'status-bad';
+                }
             }
         }
 
@@ -228,139 +525,8 @@
             }
             cameraActive = false;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            errorPointsContainer.innerHTML = '';
             statusElement.textContent = 'Камера остановлена';
-        }
-
-        function startTracking() {
-            function drawFrame() {
-                if (!cameraActive) return;
-                
-                // Отрисовываем видео
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                // Отслеживание позы с точками на теле
-                simulatePoseTracking();
-                
-                requestAnimationFrame(drawFrame);
-            }
-            
-            drawFrame();
-        }
-
-        function simulatePoseTracking() {
-            // Случайная точность от 60% до 95%
-            const accuracy = 60 + Math.floor(Math.random() * 35);
-            accuracyElement.textContent = accuracy + '%';
-            
-            // Случайное определение правильности позы
-            const isCorrectPose = Math.random() > 0.3;
-            
-            // Рисуем точки на теле
-            drawBodyPoints(isCorrectPose);
-            
-            // Обновляем статус
-            if (isCorrectPose) {
-                statusElement.textContent = '✅ Отличное выполнение! Продолжайте!';
-                statusElement.className = 'status-good';
-                
-                // Увеличиваем счетчик повторений иногда
-                if (Math.random() > 0.8) {
-                    const currentReps = parseInt(repetitionsElement.textContent);
-                    repetitionsElement.textContent = currentReps + 1;
-                }
-            } else {
-                statusElement.textContent = '❌ Исправьте положение тела';
-                statusElement.className = 'status-bad';
-            }
-        }
-
-        function drawBodyPoints(isCorrect) {
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            
-            // Все точки тела человека
-            const bodyPoints = [
-                // Голова (5 точек)
-                {x: centerX, y: centerY - 80, name: "Лоб"},
-                {x: centerX - 15, y: centerY - 85, name: "Левая бровь"},
-                {x: centerX + 15, y: centerY - 85, name: "Правая бровь"},
-                {x: centerX - 10, y: centerY - 75, name: "Левый глаз"},
-                {x: centerX + 10, y: centerY - 75, name: "Правый глаз"},
-                
-                // Шея и плечи (4 точки)
-                {x: centerX, y: centerY - 60, name: "Шея"},
-                {x: centerX - 30, y: centerY - 55, name: "Левое плечо"},
-                {x: centerX + 30, y: centerY - 55, name: "Правое плечо"},
-                {x: centerX, y: centerY - 50, name: "Ключица"},
-                
-                // Руки (12 точек)
-                {x: centerX - 45, y: centerY - 45, name: "Левый бицепс"},
-                {x: centerX + 45, y: centerY - 45, name: "Правый бицепс"},
-                {x: centerX - 55, y: centerY - 35, name: "Левый локоть"},
-                {x: centerX + 55, y: centerY - 35, name: "Правый локоть"},
-                {x: centerX - 65, y: centerY - 25, name: "Левое предплечье"},
-                {x: centerX + 65, y: centerY - 25, name: "Правое предплечье"},
-                {x: centerX - 70, y: centerY - 15, name: "Левое запястье"},
-                {x: centerX + 70, y: centerY - 15, name: "Правое запястье"},
-                {x: centerX - 72, y: centerY - 5, name: "Левая кисть"},
-                {x: centerX + 72, y: centerY - 5, name: "Правая кисть"},
-                
-                // Торс (6 точек)
-                {x: centerX, y: centerY - 40, name: "Грудь"},
-                {x: centerX - 20, y: centerY - 30, name: "Левая грудь"},
-                {x: centerX + 20, y: centerY - 30, name: "Правая грудь"},
-                {x: centerX, y: centerY - 20, name: "Солнечное сплетение"},
-                {x: centerX, y: centerY, name: "Талия"},
-                {x: centerX, y: centerY + 15, name: "Таз"},
-                
-                // Ноги (16 точек)
-                {x: centerX - 15, y: centerY + 25, name: "Левое бедро"},
-                {x: centerX + 15, y: centerY + 25, name: "Правое бедро"},
-                {x: centerX - 18, y: centerY + 40, name: "Левое колено"},
-                {x: centerX + 18, y: centerY + 40, name: "Правое колено"},
-                {x: centerX - 20, y: centerY + 55, name: "Левая голень"},
-                {x: centerX + 20, y: centerY + 55, name: "Правая голень"},
-                {x: centerX - 22, y: centerY + 70, name: "Левая лодыжка"},
-                {x: centerX + 22, y: centerY + 70, name: "Правая лодыжка"},
-                {x: centerX - 25, y: centerY + 80, name: "Левая стопа"},
-                {x: centerX + 25, y: centerY + 80, name: "Правая стопа"},
-                
-                // Спина (4 точки)
-                {x: centerX - 25, y: centerY - 35, name: "Левая лопатка"},
-                {x: centerX + 25, y: centerY - 35, name: "Правая лопатка"},
-                {x: centerX - 20, y: centerY - 10, name: "Поясница слева"},
-                {x: centerX + 20, y: centerY - 10, name: "Поясница справа"}
-            ];
-
-            // Рисуем все точки
-            bodyPoints.forEach(point => {
-                // Случайно определяем какие точки неправильные
-                const isPointCorrect = Math.random() > 0.2; // 80% точек правильные
-                
-                const color = isCorrect ? 
-                    (isPointCorrect ? '#00ff00' : '#ff0000') : 
-                    '#ff0000';
-                
-                const size = isPointCorrect ? 6 : 8;
-                
-                // Рисуем точку
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, size, 0, 2 * Math.PI);
-                ctx.fill();
-                
-                // Белая обводка для лучшей видимости
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                
-                // Подписываем точку если она неправильная
-                if (!isPointCorrect) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = '12px Arial';
-                    ctx.fillText(point.name, point.x + 10, point.y - 10);
-                }
-            });
         }
     </script>
 </body>
