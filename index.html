@@ -39,14 +39,80 @@
         .btn:hover {
             background: #5a6fd8;
         }
+        #mainPage {
+            display: none;
+            max-width: 600px;
+        }
+        .exercise-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 15px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 180px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- СТРАНИЦА РЕГИСТРАЦИИ -->
+    <div id="authPage" class="container">
         <h1>🏥 Rehab Platform</h1>
         <p>Сообщество для всех</p>
-        <button class="btn" onclick="alert('Регистрация прошла успешно!')">Присоединиться</button>
-        <button class="btn" onclick="alert('Добро пожаловать!')">Войти</button>
+        <button class="btn" onclick="register()">Присоединиться</button>
+        <button class="btn" onclick="login()">Войти</button>
     </div>
+
+    <!-- ГЛАВНАЯ СТРАНИЦА (после входа) -->
+    <div id="mainPage" class="container">
+        <h1>🎉 Добро пожаловать!</h1>
+        <p>Выберите упражнение:</p>
+        
+        <button class="exercise-btn" onclick="startExercise('arm')">💪 Упражнения для рук</button>
+        <button class="exercise-btn" onclick="startExercise('leg')">🦵 Упражнения для ног</button>
+        <button class="exercise-btn" onclick="startExercise('face')">😊 Упражнения для лица</button>
+        
+        <div style="margin-top: 30px;">
+            <button class="btn" onclick="logout()" style="background: #e74c3c;">Выйти</button>
+        </div>
+    </div>
+
+    <script>
+        function register() {
+            alert('Регистрация прошла успешно!');
+            // ПЕРЕХОД НА ГЛАВНУЮ СТРАНИЦУ
+            showMainPage();
+        }
+        
+        function login() {
+            alert('Вход выполнен! Добро пожаловать!');
+            // ПЕРЕХОД НА ГЛАВНУЮ СТРАНИЦУ
+            showMainPage();
+        }
+        
+        function showMainPage() {
+            // Скрываем страницу регистрации
+            document.getElementById('authPage').style.display = 'none';
+            // Показываем главную страницу
+            document.getElementById('mainPage').style.display = 'block';
+        }
+        
+        function logout() {
+            // Возвращаемся на страницу регистрации
+            document.getElementById('mainPage').style.display = 'none';
+            document.getElementById('authPage').style.display = 'block';
+        }
+        
+        function startExercise(type) {
+            if (type === 'arm') {
+                alert('💪 Начинаем упражнения для рук!');
+            } else if (type === 'leg') {
+                alert('🦵 Начинаем упражнения для ног!');
+            } else if (type === 'face') {
+                alert('😊 Начинаем упражнения для лица!');
+            }
+        }
+    </script>
 </body>
 </html>
